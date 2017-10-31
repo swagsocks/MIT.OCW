@@ -1,0 +1,42 @@
+def alpha_beta_search(board, depth,
+                      eval_fn,
+                      # NOTE: You should use get_next_moves_fn when generating
+                      # next board configurations, and is_terminal_fn when
+                      # checking game termination.
+                      # The default functions set here will work
+                      # for connect_four.
+                      get_next_moves_fn=get_all_next_moves,
+		      is_terminal_fn=is_terminal):
+	alpha = NEG_INFINITY
+	beta = INFINITY
+	if is_terminal_fn(depth, board):
+		return eval_fn(board)		      
+	[v, move] = [NEG_INFINITY, None]
+	for move, new_board in get_next_moves_fn(board):
+		[v, move] = max([v, move], [min_value(board, depth-1, alpha, beta, eval_fn), move])
+	return move
+	   
+def max_value(board, depth, alpha, beta, eval_fn,
+						 get_next_moves_fn=get_all_next_moves,
+						 is_terminal_fn=is_terminal):					 
+	if is_terminal_fn(depth, board):
+		return eval_fn(board)
+	v = NEG_INFINITY
+	for move, new_board in get_next_moves_fn(board):
+		v = max(v, min_value(new_board, depth-1, alpha, beta, eval_fn))
+		alpha = max(alpha, v)
+		if alpha >= beta:
+			return alpha
+	return v
+def min_value(board, depth, alpha, beta, eval_fn,
+						 get_next_moves_fn=get_all_next_moves,
+						 is_terminal_fn=is_terminal):					 
+	if is_terminal_fn(depth, board):
+		return eval_fn(board)
+	v = INFINITY
+	for move, new_board in get_next_moves_fn(board):
+		v = max(v, max_value(new_board, depth-1, alpha, beta, eval_fn))
+		beta = max(beta, v)
+		if beta <= alpha:
+			return beta	
+	return v
