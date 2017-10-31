@@ -1,0 +1,166 @@
+# Import the Graph data structure from 'search.py'
+# Refer to search.py for documentation
+from search import Graph
+
+## Optional Warm-up: BFS and DFS
+# If you implement these, the offline tester will test them.
+# If you don't, it won't.
+# The online tester will not test them.
+
+def bfs(graph, start, goal, verbose =False):
+	agenda = [start]
+	visited = []
+	def circle(x):
+		new1 = list(set(graph.get_connected_nodes(x[0])) - set(visited))
+		x += new1
+		visited.append(x[0])
+		if verbose == True:
+			print (x[0], x[1:])
+		if x[0] ==goal:
+			return 'Done: ' + goal
+		else:
+			return circle(x[1:])
+	return circle(agenda)
+
+## Once you have completed the breadth-first search,
+## this part should be very simple to complete.
+def dfs(graph, start, goal, verbose =False):
+	agenda = [start]
+	visited = []
+	def circle(x):
+		new1 = list(set(graph.get_connected_nodes(x[0])) - set(visited))
+		visited.append(x[0])
+		if verbose == True:
+			print (x[0], new1, x)
+		x = x[1:]
+		new1 += x
+		if new1[0] ==goal:
+			return 'Done: ' + goal
+		else:
+			return circle(new1)
+	return circle(agenda)
+
+
+
+## Now we're going to add some heuristics into the search.  
+## Remember that hill-climbing is a modified version of depth-first search.
+## Search direction should be towards lower heuristic values to the goal.
+def hill_climbing(graph, start, goal, verbose = True):
+	agenda = [start]
+	visited = []
+	def circle(x):
+		new1 = list(set(graph.get_connected_nodes(x[0])) - set(visited))
+		visited.append(x[0])
+		Distances = {}
+		for y in new1:
+			Distances[y] = graph.get_heuristic(y, goal)
+		new2 = sorted(Distances, key = Distances.get)
+		if verbose == True:
+			print (x[0], x)
+			for keys, values in Distances.iteritems():
+				print keys, values
+		x = x[1:]
+		new2 += x
+		if new2[0] ==goal:
+			return 'Done: ' + goal
+		else:
+			return circle(new2)
+	return circle(agenda)
+
+## Now we're going to implement beam search, a variation on BFS
+## that caps the amount of memory used to store paths.  Remember,
+## we maintain only k candidate paths of length n in our agenda at any time.
+## The k top candidates are to be determined using the 
+## graph get_heuristic function, with lower values being better values.
+
+def beam_search(graph, start, goal, beam_width, verbose = False):
+	agenda = [start]
+	visited = []
+	def circle(x):
+		new1 = []
+		for y in x:
+			new1 += list(set(graph.get_connected_nodes(y)) - set(visited))
+			visited.append(y)
+		Distances = {}
+		for y in new1:
+			Distances[y] = graph.get_heuristic(y, goal)
+		new2 = sorted(Distances, key = Distances.get)
+		new2 = new2[:(beam_width)]
+		if verbose == True:
+			print (x[0], new2)
+		if x[0] ==goal:
+			return 'Done: ' + goal
+		else:
+			return circle(new2)
+	return circle(agenda)
+
+## Now we're going to try optimal search.  The previous searches haven't
+## used edge distances in the calculation.
+
+## This function takes in a graph and a list of node names, and returns
+## the sum of edge lengths along the path -- the total distance in the path.
+def path_length(graph, node_names):
+	path = []
+	for x in range(0,len(node_names)-1):
+		path.append(graph.get_edge(node_names[x].name, node_names[x+1].name).length)
+	return sum(path)
+
+class node:
+	def __init__(self, name, graph, parent = None):
+		self.graph = graph
+		self.parent = parent
+		self.name = name
+		self.children = list(set(graph.get_connected_nodes(name)) - set([parent]))
+		if parent:
+			self.path = self.parent.path + [self.name]
+		else:
+			self.path = [self.name]
+	def heuristic(self, goal):
+		return self.graph.get_heuristic(self.name, goal)
+		
+def branch_and_bound(graph, start, goal):
+	agenda = [node(x, graph) for x in [start]]
+	extended = []
+	def circle(x):
+		for y in x:
+			if y.name in extended:
+				x.remove(y)
+		branch = x[0].children
+		extended.append(x[0].name)
+		print x[0].name, path_length(graph, x[0].path)
+		for z in branch:
+			x.append(node(z, graph, x[0]))
+		options = {}
+		for y in x:
+			options[y] = path_length(graph, y.path)
+		q = sorted(options, key = options.get)
+		for a in q: 
+			if a.name == goal:
+				return 'Done: ' + goal + ' : ' + str(path_length(graph, a.path))
+		return circle(q[1:])
+	return circle(agenda)
+
+
+    raise NotImplementedError
+
+def a_star(graph, start, goal):
+	agenda = [node(x, graph) for x in [start]]
+	extended = []
+	def circle(x):
+		for y in x:
+			if y.name in extended:
+				x.remove(y)
+		branch = x[0].children
+		extended.append(x[0].name)
+		print x[0].name, path_length(graph, x[0].path)
+		for z in branch:
+			x.append(node(z, graph, x[0]))
+		options = {}
+		for y in x:
+			options[y] = path_length(graph, y.path) + y.heuristic(goal)
+		q = sorted(options, key = options.get)
+		for a in q: 
+			if a.name == goal:
+				return 'Done: ' + goal + ' : ' + str(path_length(graph, a.path))
+		return circle(q[1:])
+	return circle(agenda)
