@@ -1,0 +1,358 @@
+#!/usr/bin/env python
+# 6.034 Lab 5
+# Neural Net
+# - In this file we have an incomplete skeleton of
+# a neural network implementation.  Follow the online instructions
+# and complete the NotImplemented methods below.
+#
+
+import math
+import random
+
+class ValuedElement(object):
+    """
+    This is an abstract class that all Network elements inherit from
+    """
+    def __init__(self,name,val):
+        self.my_name = name
+        self.my_value = val
+    def set_value(self,val):
+        self.my_value = val
+    def get_value(self):
+        return self.my_value
+    def get_name(self):
+        return self.my_name
+    def __repr__(self):
+        return "%s(%s)" %(self.my_name, self.my_value)
+
+class DifferentiableElement(object):
+    """
+    This is an abstract interface class implemented by all Network
+    parts that require some differentiable element.
+    """
+    def output(self):
+        raise NotImplementedError, "This is an abstract method"
+    def dOutdX(self, elem):
+        raise NotImplementedError, "This is an abstract method"
+    def clear_cache(self):
+        """clears any precalculated cached value"""
+        pass
+
+class Input(ValuedElement,DifferentiableElement):
+    """
+    Representation of an Input into the network.
+    These may represent variable inputs as well as fixed inputs
+    (Thresholds) that are always set to -1.
+    """
+    def __init__(self,name,val):
+        ValuedElement.__init__(self,name,val)
+        DifferentiableElement.__init__(self)
+    def output(self):
+        return self.get_value()
+    def dOutdX(self, elem):
+        return 0
+
+class Weight(ValuedElement):
+    """
+    Representation of an weight into a Neural Unit.
+    """
+    def __init__(self,name,val):
+        ValuedElement.__init__(self,name,val)
+        self.next_value = None
+    def set_next_value(self,val):
+        self.next_value = val
+    def update(self):
+        self.my_value = self.next_value
+
+class Neuron(DifferentiableElement):
+    """
+    Representation of a single sigmoid Neural Unit.
+    """
+    def __init__(self, name, inputs, input_weights, use_cache=True):
+        assert len(inputs)==len(input_weights)
+        for i in range(len(inputs)):
+            assert isinstance(inputs[i],(Neuron,Input))
+            assert isinstance(input_weights[i],Weight)
+        DifferentiableElement.__init__(self)
+        self.my_name = name
+        self.my_inputs = inputs # list of Neuron or Input instances
+        self.my_weights = input_weights # list of Weight instances
+        self.use_cache = use_cache
+        self.clear_cache()
+        self.my_descendant_weights = None
+    def get_descendant_weights(self):
+        """
+        Returns a mapping of the names of direct weights into this neuron,
+        to all descendant weights.
+        """
+        if self.my_descendant_weights is None:
+            self.my_descendant_weights = {}
+            inputs = self.get_inputs()
+            weights = self.get_weights()
+            for i in xrange(len(weights)):
+                weight = weights[i]
+                weight_name = weight.get_name()
+                self.my_descendant_weights[weight_name] = set()
+                input = inputs[i]
+                if not isinstance(input, Input):
+                    descendants = input.get_descendant_weights()
+                    for name, s in descendants.items():
+                        st = self.my_descendant_weights[weight_name]
+                        st = st.union(s)
+                        st.add(name)
+                        self.my_descendant_weights[weight_name] = st
+        return self.my_descendant_weights
+    def isa_descendant_weight_of(self, target, weight):
+        """
+        Checks if [target] is a indirect input weight into this Neuron
+        via the direct input weight [weight].
+        """
+        weights = self.get_descendant_weights()
+        if weight.get_name() in weights:
+            return target.get_name() in weights[weight.get_name()]
+        else:
+            raise Exception("weight %s is not connect to this node: %s"
+                            %(weight, self))
+    def has_weight(self, weight):
+        """
+        Checks if [weight] is a direct input weight into this Neuron.
+        """
+        weights = self.get_descendant_weights()
+        return weight.get_name() in self.get_descendant_weights()
+    def get_weight_nodes(self):
+        return self.my_weights
+    def clear_cache(self):
+        self.my_output = None
+        self.my_doutdx = {}
+    def output(self):
+        # Implement compute_output instead!!
+        if self.use_cache:
+            # caching optimization, saves previously computed dOutDx.
+            if self.my_output is None:
+                self.my_output = self.compute_output()
+            return self.my_output
+        return self.compute_output()
+    def compute_output(self):
+    	alpha_list = []
+    	for i in range(len(self.get_inputs())):
+    		alpha_list.append(self.get_inputs()[i].output() * self.get_weights()[i].get_value())
+    	alpha = sum(alpha_list)
+    	if alpha < 0:
+    		out = 1 - 1/(1 + math.exp(alpha))
+    	else:
+    		out = 1/(1 + math.exp(-alpha))
+        return out
+    def dOutdX(self, elem):
+        # Implement compute_doutdx instead!!
+        if self.use_cache:
+            # caching optimization, saves previously computed dOutDx.
+            if elem not in self.my_doutdx:
+                self.my_doutdx[elem] = self.compute_doutdx(elem)
+            return self.my_doutdx[elem]
+        return self.compute_doutdx(elem)
+    def compute_doutdx(self, elem):
+    	if self.has_weight(elem):
+    		for x in range(len(self.get_inputs())):
+    			if self.get_weights()[x] == elem:
+    				dout = self.output() * (1 - self.output()) * self.get_inputs()[x].output()
+    				return dout
+    	else:
+    		new = []
+    		for i in range(len(self.get_inputs())):
+    			new.append(self.get_inputs()[i].dOutdX(elem) * self.get_weights()[i].get_value())
+    		return self.output() * (1 - self.output()) * sum(new)	
+    def get_weights(self):
+        return self.my_weights
+    def get_inputs(self):
+        return self.my_inputs
+    def get_name(self):
+        return self.my_name
+    def __repr__(self):
+        return "Neuron(%s)" %(self.my_name)
+
+class PerformanceElem(DifferentiableElement):
+    def __init__(self,input,desired_value):
+        assert isinstance(input,(Input,Neuron))
+        DifferentiableElement.__init__(self)
+        self.my_input = input
+        self.my_desired_val = desired_value
+    def output(self):
+		return -.5 * ((self.my_desired_val- self.my_input.output()) ** 2)
+    def dOutdX(self, elem):
+        dOut = (self.my_desired_val - self.my_input.output()) * self.my_input.dOutdX(elem)
+        return dOut
+    def set_desired(self,new_desired):
+        self.my_desired_val = new_desired
+    def get_input(self):
+        return self.my_input
+
+def alphabetize(x,y):
+    if x.get_name()>y.get_name():
+        return 1
+    return -1
+
+class Network(object):
+    def __init__(self,performance_node,neurons):
+        self.inputs =  []
+        self.weights = []
+        self.performance = performance_node
+        self.output = performance_node.get_input()
+        self.neurons = neurons[:]
+        self.neurons.sort(cmp=alphabetize)
+        for neuron in self.neurons:
+            self.weights.extend(neuron.get_weights())
+            for i in neuron.get_inputs():
+                if isinstance(i,Input) and not i.get_name()=='i0' and not i in self.inputs:
+                    self.inputs.append(i)
+        self.weights.reverse()
+        self.weights = []
+        for n in self.neurons:
+            self.weights += n.get_weight_nodes()
+
+    def clear_cache(self):
+        for n in self.neurons:
+            n.clear_cache()
+
+def seed_random():
+    """Seed the random number generator so that random
+    numbers are deterministically 'random'"""
+    random.seed(0)
+
+def random_weight():
+    """Generate a deterministic random weight"""
+    # We found that random.randrange(-1,2) to work well emperically 
+    # even though it produces randomly 3 integer values -1, 0, and 1.
+    return random.randrange(-1, 2)
+
+    # Uncomment the following if you want to try a uniform distribuiton 
+    # of random numbers compare and see what the difference is.
+    # return random.uniform(-1, 1)
+
+def make_neural_net_basic():
+    """
+    Constructs a 2-input, 1-output Network with a single neuron.
+    This network is used to test your network implementation
+    and a guide for constructing more complex networks.
+
+    Naming convention for each of the elements:
+
+    Input: 'i'+ input_number
+    Example: 'i1', 'i2', etc.
+    Conventions: Start numbering at 1.
+                 For the -1 inputs, use 'i0' for everything
+
+    Weight: 'w' + from_identifier + to_identifier
+    Examples: 'w1A' for weight from Input i1 to Neuron A
+              'wAB' for weight from Neuron A to Neuron B
+
+    Neuron: alphabet_letter
+    Convention: Order names by distance to the inputs.
+                If equal distant, then order them left to right.
+    Example:  'A' is the neuron closest to the inputs.
+
+    All names should be unique.
+    You must follow these conventions in order to pass all the tests.
+    """
+    i0 = Input('i0', -1.0) # this input is immutable
+    i1 = Input('i1', 0.0)
+    i2 = Input('i2', 0.0)
+    w1A = Weight('w1A', 1)
+    w2A = Weight('w2A', 1)
+    wA  = Weight('wA', 1)
+
+    # Inputs must be in the same order as their associated weights
+    A = Neuron('A', [i1,i2,i0], [w1A,w2A,wA])
+    P = PerformanceElem(A, 0.0)
+
+    net = Network(P,[A])
+    return net
+
+def make_neural_net_two_layer():
+    """
+    Create a 2-input, 1-output Network with three neurons.
+    There should be two neurons at the first level, each receiving both inputs
+    Both of the first level neurons should feed into the second layer neuron.
+
+    See 'make_neural_net_basic' for required naming convention for inputs,
+    weights, and neurons.
+    """
+    i0 = Input('i0', -1.0) # this input is immutable
+    i1 = Input('i1', 0.0)
+    i2 = Input('i2', 0.0)
+    seed_random()
+    wt1 = random_weight()
+    wt2 = random_weight()
+    wt3 = random_weight()
+    wt4 = random_weight()
+    wt5 = random_weight()
+    wt6 = random_weight()
+	
+    w1A = Weight('w1A', wt1)
+    w2A = Weight('w2A', wt2)
+    w1B = Weight('w1B', wt3)
+    w2B = Weight('w2B', wt4)
+    wA  = Weight('wA', -1)
+    wB  = Weight('wB', -1)
+    wAC = Weight('wAC', wt5)
+    wBC = Weight('wBC', wt6)
+    wC = Weight('wC', -1)
+
+    # Inputs must be in the same order as their associated weights
+    A = Neuron('A', [i1,i2,i0], [w1A,w2A,wA])
+    B = Neuron('B', [i1,i2,i0], [w1B,w2B,wB])
+    C = Neuron('C', [A,B,i0], [wAC,wBC,wC])
+    P = PerformanceElem(C, 0.0)
+
+    net = Network(P,[A, B, C])
+    return net
+
+def make_neural_net_challenging():
+    """
+    Design a network that can in-theory solve all 3 problems described in
+    the lab instructions.  Your final network should contain
+    at most 5 neuron units.
+
+    See 'make_neural_net_basic' for required naming convention for inputs,
+    weights, and neurons.
+    """
+    i0 = Input('i0', -1.0) # this input is immutable
+    i1 = Input('i1', 0.0)
+    i2 = Input('i2', 0.0)
+    seed_random()
+    wt1 = random_weight()
+    wt2 = random_weight()
+    wt3 = random_weight()
+    wt4 = random_weight()
+    wt5 = random_weight()
+    wt6 = random_weight()
+    wt7 = random_weight()
+    wt8 = random_weight()
+    wt9 = random_weight()
+    wt10 = random_weight()
+	
+    w1A = Weight('w1A', wt1)
+    w2A = Weight('w2A', wt2)
+    w1B = Weight('w1B', wt3)
+    w2B = Weight('w2B', wt4)
+    wA  = Weight('wA', -1)
+    wB  = Weight('wB', -1)
+    wAC = Weight('wAC', wt5)
+    wBC = Weight('wBC', wt6)
+    wC = Weight('wC', -1)
+    wAD = Weight('wAD', wt7)
+    wBD = Weight('wBD', wt8)
+    wD = Weight('wD', -1)
+    wCE = Weight('wCE', wt9)
+    wDE = Weight('wDE', wt10)
+    wE = Weight('wE', -1)
+
+    # Inputs must be in the same order as their associated weights
+    A = Neuron('A', [i1,i2,i0], [w1A,w2A,wA])
+    B = Neuron('B', [i1,i2,i0], [w1B,w2B,wB])
+    C = Neuron('C', [A,B,i0], [wAC,wBC,wC])
+    D = Neuron('D', [A,B,i0], [wAD,wBD,wD])
+    E = Neuron('D', [C,D,i0], [wCE,wDE,wE])
+    P = PerformanceElem(E, 0.0)
+
+    net = Network(P,[A, B, C, D, E])
+    return net
